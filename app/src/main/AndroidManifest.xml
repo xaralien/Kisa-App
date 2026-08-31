@@ -47,7 +47,6 @@
 
         <activity
             android:name=".MainActivity"
-            android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:exported="true"
             android:theme="@style/Theme.KisaApp.Launch">
