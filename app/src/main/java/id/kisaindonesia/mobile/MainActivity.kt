@@ -86,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         // Switch from the launch (splash) theme to the normal app theme
         setTheme(R.style.Theme_KisaApp)
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         setContentView(R.layout.activity_main)
 
         webView = findViewById(R.id.webView)
