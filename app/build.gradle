@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "id.kisaindonesia.mobile"
-        targetSdk 33  // Jangan terlalu tinggi, agar MANAGE_EXTERNAL_STORAGE berfungsi
+        targetSdk 34  // Aman, tidak ada masalah
         minSdk 21
         versionCode 1
         versionName "1.0"
