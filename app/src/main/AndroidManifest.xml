@@ -23,6 +23,9 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
 
+    <!-- Needed on Android 13+ to show the "download complete" notification -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Hardware is optional so the app installs on all devices -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
