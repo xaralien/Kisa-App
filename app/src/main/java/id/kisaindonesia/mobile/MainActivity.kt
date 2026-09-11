@@ -2,15 +2,21 @@ package id.kisaindonesia.mobile
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
+import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
+import android.webkit.URLUtil
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -140,8 +146,11 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.READ_MEDIA_IMAGES)
             perms.add(Manifest.permission.READ_MEDIA_VIDEO)
+            // Needed so DownloadManager's "download complete" notification can show
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }
         val toRequest = perms.filter { !hasPermission(it) }
         if (toRequest.isNotEmpty()) {
@@ -175,6 +184,44 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = createWebViewClient()
         webView.webChromeClient = createWebChromeClient()
+
+        // Any file the website triggers a download for (PDF, image, invoice, etc.)
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            startDownload(url, userAgent, contentDisposition, mimetype)
+        }
+    }
+
+    // ---------- Downloads ----------
+
+    private fun startDownload(url: String, userAgent: String?, contentDisposition: String?, mimetype: String?) {
+        try {
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val cookie = CookieManager.getInstance().getCookie(url)
+
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                if (!cookie.isNullOrEmpty()) addRequestHeader("Cookie", cookie)
+                addRequestHeader("User-Agent", userAgent ?: webView.settings.userAgentString)
+                setMimeType(
+                    mimetype?.takeIf { it.isNotBlank() }
+                        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                            MimeTypeMap.getFileExtensionFromUrl(url)
+                        ) ?: "application/octet-stream"
+                )
+                setDescription("Downloading $fileName")
+                setTitle(fileName)
+                // Shows progress while downloading and a notification when it's done
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+            }
+
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            dm.enqueue(request)
+            Toast.makeText(this, "Downloading $fileName", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun createWebViewClient() = object : WebViewClient() {
