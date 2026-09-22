@@ -45,12 +45,20 @@ jobs:
           echo "===== baris package di tiap file Kotlin ====="
           find app/src -name "*.kt" -exec grep -Hn "^package" {} \;
           echo
-          ./gradlew :app:processDebugResources --quiet
+          ./gradlew :app:processDebugResources --quiet || echo "(processDebugResources gagal)"
           echo "===== lokasi class R yang dihasilkan ====="
           find app/build -name "R.jar" | while read f; do
             echo "-- $f"
             unzip -l "$f" | grep -E "/R\.class$" | head -5
           done
+          echo
+          echo "===== isi lengkap app/build.gradle ====="
+          cat app/build.gradle
+          echo
+          echo "######################################################"
+          echo "#  SALIN SEMUA TEKS DI ATAS INI DAN KIRIM KE CLAUDE   #"
+          echo "######################################################"
+          exit 1
       # -----------------------------------------------------------------------
 
       - name: Build debug APK
