@@ -20,11 +20,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # Android SDK sudah terpasang di runner; setup-android@v3 dibuang
+      # karena mencoba memasang paket 'tools' yang sudah dihapus Google.
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Install Android 36 platform
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Bootstrap Gradle wrapper
-        run: gradle wrapper --gradle-version 8.7
+        run: gradle wrapper --gradle-version 8.11.1
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
@@ -54,3 +60,7 @@ jobs:
         with:
           name: Kisa-release-aab
           path: app/build/outputs/bundle/release/app-release.aab
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/kisa.jks"
