@@ -1,11 +1,13 @@
-package id.smesco.mobile
+package id.kisaindonesia.mobile
 
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +16,7 @@ import android.provider.MediaStore
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
+import android.webkit.MimeTypeMap
 import android.webkit.PermissionRequest
 import android.webkit.URLUtil
 import android.webkit.ValueCallback
@@ -30,6 +33,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
 import java.text.SimpleDateFormat
@@ -39,7 +45,7 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
 
     // ===== Change this URL if your site ever moves =====
-    private val startUrl = "https://smesco.kodesis.id/auth"
+    private val startUrl = "https://kisaindonesia.id/"
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -89,9 +95,12 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         // Switch from the launch (splash) theme to the normal app theme
-        setTheme(R.style.Theme_SmescoApp)
+        setTheme(R.style.Theme_KisaApp)
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         setContentView(R.layout.activity_main)
+
+        setupSystemBars()
 
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
@@ -101,7 +110,6 @@ class MainActivity : AppCompatActivity() {
         // Safety net: hide the splash after 12s even if the page never reports "finished"
         splashOverlay.postDelayed({ hideSplash() }, 12000)
 
-        setupDownloadListener()
         requestInitialPermissions()
         configureWebView()
 
@@ -124,133 +132,40 @@ class MainActivity : AppCompatActivity() {
         })
     }
 
-    // ---------- Downloads ----------
-
-    private fun setupDownloadListener() {
-        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
-            try {
-                if (url.startsWith("blob:") || url.startsWith("data:")) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Berkas dibuat di dalam halaman, tidak bisa diunduh langsung",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return@setDownloadListener
-                }
-
-                val fileName = resolveFileName(url, contentDisposition, mimeType)
-
-                val request = DownloadManager.Request(Uri.parse(url))
-                request.addRequestHeader("User-Agent", userAgent)
-                val cookies = CookieManager.getInstance().getCookie(url)
-                if (cookies != null) request.addRequestHeader("Cookie", cookies)
-                // Jangan pakai MIME mentah dari server: kalau octet-stream,
-                // Android ikut menebak dan berkas jatuh menjadi .bin
-                request.setMimeType(mimeTypeFromName(fileName) ?: mimeType)
-                request.setDescription("Mengunduh berkas...")
-                request.setTitle(fileName)
-                request.allowScanningByMediaScanner()
-                request.setNotificationVisibility(
-                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
-                )
-                request.setDestinationInExternalPublicDir(
-                    Environment.DIRECTORY_DOWNLOADS,
-                    fileName
-                )
-
-                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                dm.enqueue(request)
-
-                Toast.makeText(this@MainActivity, "Mengunduh: $fileName", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Gagal mengunduh: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
+    // ---------- Status bar / navigation bar spacing ----------
 
     /**
-     * Menentukan nama berkas dengan urutan: header Content-Disposition (termasuk
-     * format RFC 5987 `filename*=UTF-8''nama.csv`), lalu ruas terakhir URL, lalu
-     * tebakan bawaan Android. Ekstensi ditambal dari parameter URL bila perlu,
-     * supaya hasil export tidak jatuh menjadi .bin.
+     * Sejak targetSdk 35+, Android memaksa tampilan edge-to-edge: konten digambar
+     * sampai ke balik status bar dan tombol navigasi. Di sini seluruh konten diberi
+     * jarak setinggi bar sistem (dan setinggi keyboard saat mengetik), sehingga
+     * header dan menu bawah halaman web tidak tertutup.
      */
-    private fun resolveFileName(url: String, contentDisposition: String?, mimeType: String?): String {
-        var name: String? = null
+    private fun setupSystemBars() {
+        val root = findViewById<View>(android.R.id.content)
+        // Warna area di balik status bar & navigation bar, samakan dengan header web
+        root.setBackgroundColor(Color.WHITE)
 
-        if (!contentDisposition.isNullOrBlank()) {
-            // filename*=UTF-8''laporan%20mei.csv
-            Regex("""filename\*\s*=\s*[^']*''([^;\s]+)""", RegexOption.IGNORE_CASE)
-                .find(contentDisposition)?.groupValues?.get(1)?.let {
-                    name = try { Uri.decode(it) } catch (e: Exception) { it }
-                }
-            // filename="laporan.csv"
-            if (name.isNullOrBlank()) {
-                Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
-                    .find(contentDisposition)?.groupValues?.get(1)?.let { name = it.trim() }
-            }
+        // Latar putih -> ikon jam, sinyal, baterai, dan tombol navigasi dibuat gelap
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
         }
 
-        // Ruas terakhir dari path URL, mis. /export/laporan.csv
-        if (name.isNullOrBlank()) {
-            val path = try { Uri.parse(url).lastPathSegment } catch (e: Exception) { null }
-            if (!path.isNullOrBlank() && path.contains(".")) name = path
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.setPadding(
+                bars.left,
+                bars.top,
+                bars.right,
+                maxOf(bars.bottom, ime.bottom)
+            )
+            WindowInsetsCompat.CONSUMED
         }
-
-        if (name.isNullOrBlank()) {
-            name = URLUtil.guessFileName(url, contentDisposition, mimeType)
-        }
-
-        var clean = name!!.substringAfterLast('/').substringAfterLast('\\')
-            .replace(Regex("""[\\/:*?"<>|]"""), "_")
-            .trim()
-
-        // Kalau masih tanpa ekstensi atau jatuh ke .bin, tebak dari URL lalu dari MIME
-        if (clean.endsWith(".bin", true) || !clean.contains(".")) {
-            val base = clean.removeSuffix(".bin").ifBlank { "download" }
-            val ext = extFromUrl(url) ?: extFromMime(mimeType)
-            if (ext != null) clean = "$base.$ext"
-        }
-
-        return clean.ifBlank { "download_${System.currentTimeMillis()}" }
+        ViewCompat.requestApplyInsets(root)
     }
-
-    /** Menebak ekstensi dari URL, termasuk pola ?format=csv / ?type=xlsx / ?export=pdf */
-    private fun extFromUrl(url: String): String? {
-        val known = listOf("csv", "xlsx", "xls", "pdf", "docx", "doc", "zip", "txt", "json", "xml", "png", "jpg", "jpeg")
-        val lower = url.lowercase()
-        Regex("""[?&](?:format|type|ext|export|output)=([a-z0-9]{2,5})""").find(lower)
-            ?.groupValues?.get(1)?.let { if (it in known) return it }
-        known.forEach { if (lower.contains(".$it?") || lower.endsWith(".$it")) return it }
-        return null
-    }
-
-    private fun extFromMime(mimeType: String?): String? = when {
-        mimeType == null -> null
-        mimeType.contains("csv") -> "csv"
-        mimeType.contains("spreadsheetml") -> "xlsx"
-        mimeType.contains("ms-excel") -> "xls"
-        mimeType.contains("pdf") -> "pdf"
-        mimeType.contains("wordprocessingml") -> "docx"
-        mimeType.contains("msword") -> "doc"
-        mimeType.contains("zip") -> "zip"
-        mimeType.contains("json") -> "json"
-        mimeType.startsWith("text/plain") -> "txt"
-        else -> null
-    }
-
-    private fun mimeTypeFromName(fileName: String): String? =
-        when (fileName.substringAfterLast('.', "").lowercase()) {
-            "csv" -> "text/csv"
-            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            "xls" -> "application/vnd.ms-excel"
-            "pdf" -> "application/pdf"
-            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            "doc" -> "application/msword"
-            "zip" -> "application/zip"
-            "txt" -> "text/plain"
-            "json" -> "application/json"
-            else -> null
-        }
 
     // ---------- Permissions ----------
 
@@ -264,6 +179,8 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.READ_MEDIA_IMAGES)
             perms.add(Manifest.permission.READ_MEDIA_VIDEO)
+            // Needed so DownloadManager's "download complete" notification can show
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -294,16 +211,50 @@ class MainActivity : AppCompatActivity() {
         s.cacheMode = WebSettings.LOAD_DEFAULT
         s.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) s.safeBrowsingEnabled = true
-        s.userAgentString = s.userAgentString + " SmescoApp/1.0"
-
-        // Keep the login session alive between launches
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+        s.userAgentString = s.userAgentString + " KisaApp/1.0"
 
         WebView.setWebContentsDebuggingEnabled(true)
 
         webView.webViewClient = createWebViewClient()
         webView.webChromeClient = createWebChromeClient()
+
+        // Any file the website triggers a download for (PDF, image, invoice, etc.)
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+            startDownload(url, userAgent, contentDisposition, mimetype)
+        }
+    }
+
+    // ---------- Downloads ----------
+
+    private fun startDownload(url: String, userAgent: String?, contentDisposition: String?, mimetype: String?) {
+        try {
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimetype)
+            val cookie = CookieManager.getInstance().getCookie(url)
+
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                if (!cookie.isNullOrEmpty()) addRequestHeader("Cookie", cookie)
+                addRequestHeader("User-Agent", userAgent ?: webView.settings.userAgentString)
+                setMimeType(
+                    mimetype?.takeIf { it.isNotBlank() }
+                        ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                            MimeTypeMap.getFileExtensionFromUrl(url)
+                        ) ?: "application/octet-stream"
+                )
+                setDescription("Downloading $fileName")
+                setTitle(fileName)
+                // Shows progress while downloading and a notification when it's done
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+            }
+
+            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            dm.enqueue(request)
+            Toast.makeText(this, "Downloading $fileName", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Download failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun createWebViewClient() = object : WebViewClient() {
@@ -315,14 +266,13 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(Intent.ACTION_VIEW, request.url))
                 true
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "Tidak ada aplikasi untuk membuka tautan ini", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "No app can open this link", Toast.LENGTH_SHORT).show()
                 true
             }
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-            CookieManager.getInstance().flush()
             swipeRefresh.isRefreshing = false
             hideSplash()
         }
@@ -404,7 +354,7 @@ class MainActivity : AppCompatActivity() {
 
         val chooser = Intent(Intent.ACTION_CHOOSER).apply {
             putExtra(Intent.EXTRA_INTENT, contentIntent)
-            putExtra(Intent.EXTRA_TITLE, "Pilih berkas atau ambil foto")
+            putExtra(Intent.EXTRA_TITLE, "Select a file or take a photo")
             if (cameraIntent != null) {
                 putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(cameraIntent))
             }
@@ -415,7 +365,7 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             filePathCallback?.onReceiveValue(null)
             filePathCallback = null
-            Toast.makeText(this, "Tidak bisa membuka pemilih berkas", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Cannot open the file picker", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -480,7 +430,7 @@ class MainActivity : AppCompatActivity() {
         webView.saveState(outState)
     }
 
-    override fun onPause() { super.onPause(); webView.onPause(); CookieManager.getInstance().flush() }
+    override fun onPause() { super.onPause(); webView.onPause() }
     override fun onResume() { super.onResume(); webView.onResume() }
     override fun onDestroy() { webView.destroy(); super.onDestroy() }
 }
