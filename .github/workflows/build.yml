@@ -20,6 +20,8 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Android SDK sudah terpasang di runner; setup-android@v3 dibuang
+      # karena mencoba memasang paket 'tools' yang sudah dihapus Google.
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
@@ -29,37 +31,6 @@ jobs:
 
       - name: Bootstrap Gradle wrapper
         run: gradle wrapper --gradle-version 8.11.1
-
-      # ---------- DIAGNOSA: hapus langkah ini setelah build berhasil ----------
-      - name: Diagnose R class
-        run: |
-          echo "===== app/build.gradle (baris penting) ====="
-          grep -nE "plugins|id '|namespace|applicationId|compileSdk|targetSdk" app/build.gradle || true
-          echo
-          echo "===== package di AndroidManifest.xml ====="
-          grep -n "package=" app/src/main/AndroidManifest.xml || echo "(tidak ada atribut package - normal)"
-          echo
-          echo "===== semua file Kotlin/Java di repo ====="
-          find app/src -name "*.kt" -o -name "*.java"
-          echo
-          echo "===== baris package di tiap file Kotlin ====="
-          find app/src -name "*.kt" -exec grep -Hn "^package" {} \;
-          echo
-          ./gradlew :app:processDebugResources --quiet || echo "(processDebugResources gagal)"
-          echo "===== lokasi class R yang dihasilkan ====="
-          find app/build -name "R.jar" | while read f; do
-            echo "-- $f"
-            unzip -l "$f" | grep -E "/R\.class$" | head -5
-          done
-          echo
-          echo "===== isi lengkap app/build.gradle ====="
-          cat app/build.gradle
-          echo
-          echo "######################################################"
-          echo "#  SALIN SEMUA TEKS DI ATAS INI DAN KIRIM KE CLAUDE   #"
-          echo "######################################################"
-          exit 1
-      # -----------------------------------------------------------------------
 
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
