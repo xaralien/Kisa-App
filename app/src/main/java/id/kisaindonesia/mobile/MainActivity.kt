@@ -35,6 +35,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -157,17 +158,21 @@ class MainActivity : AppCompatActivity() {
     private fun setupSystemBars() {
         val root = findViewById<View>(android.R.id.content)
         root.setBackgroundColor(Color.WHITE)
+        window.decorView.setBackgroundColor(Color.WHITE)
 
-        // Area di balik status bar dan navigation bar. Tanpa ini, Android memakai
-        // warna bawaan (hitam) sehingga ikon gelap jadi tidak terbaca. Diabaikan
-        // di Android 15+ karena di sana bar selalu transparan, dan latar putih
-        // decorView di bawah ini yang mengambil alih.
+        // Android 15+ memasang scrim gelap sendiri di belakang tombol tiga-tombol saat
+        // app menggambar edge-to-edge, menimpa warna apa pun yang kita set. Dua baris
+        // ini mematikannya, sehingga latar putih di bawahnya yang terlihat.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
+        // Android 14 ke bawah masih mematuhi warna bar secara langsung.
         @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            window.statusBarColor = Color.WHITE
-            window.navigationBarColor = Color.WHITE
+            window.statusBarColor = Color.TRANSPARENT
+            window.navigationBarColor = Color.TRANSPARENT
         }
-        window.decorView.setBackgroundColor(Color.WHITE)
 
         val controller = WindowCompat.getInsetsController(window, window.decorView)
 
@@ -178,26 +183,16 @@ class MainActivity : AppCompatActivity() {
         if (IMMERSIVE_NAV) {
             // BEHAVIOR_DEFAULT (bukan TRANSIENT): saat digeser dari tepi bawah, tombol
             // sistem muncul sebagai bar sungguhan yang mengambil ruang layout, sehingga
-            // menu web ikut terdorong naik ke atasnya. Bar transient tidak bisa begini,
-            // karena Android sengaja membuatnya melayang tanpa menggeser konten.
+            // menu web ikut terdorong naik ke atasnya.
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
             controller.hide(WindowInsetsCompat.Type.navigationBars())
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
-            val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
-            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            view.setPadding(
-                bars.left,
-                bars.top,
-                bars.right,
-                maxOf(bars.bottom, ime.bottom)
-            )
+            // Saat bar sedang beranimasi, biarkan callback animasi di bawah yang
+            // mengatur jarak, supaya menu bergerak seiring tombol - bukan melompat.
+            if (!barsAnimating) applyBarPadding(view, insets)
 
-            // Tombol sistem sedang tampil -> jadwalkan sembunyi lagi, meniru perilaku
-            // auto-hide. Dibatalkan kalau keyboard sedang terbuka.
             if (IMMERSIVE_NAV) {
                 val navVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
                 val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
@@ -206,7 +201,43 @@ class MainActivity : AppCompatActivity() {
 
             WindowInsetsCompat.CONSUMED
         }
+
+        // Menyamakan gerakan menu dengan animasi masuk/keluar bar sistem.
+        ViewCompat.setWindowInsetsAnimationCallback(
+            root,
+            object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+
+                override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                    barsAnimating = true
+                }
+
+                override fun onProgress(
+                    insets: WindowInsetsCompat,
+                    runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                ): WindowInsetsCompat {
+                    applyBarPadding(root, insets)
+                    return insets
+                }
+
+                override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                    barsAnimating = false
+                    ViewCompat.requestApplyInsets(root)
+                }
+            }
+        )
+
         ViewCompat.requestApplyInsets(root)
+    }
+
+    private var barsAnimating = false
+
+    /** Memberi jarak setinggi bar sistem (atau keyboard, mana yang lebih tinggi). */
+    private fun applyBarPadding(view: View, insets: WindowInsetsCompat) {
+        val bars = insets.getInsets(
+            WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+        )
+        val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+        view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
     }
 
     /** Menyembunyikan tombol sistem lagi beberapa detik setelah ia dimunculkan. */
