@@ -36,6 +36,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
 import java.text.SimpleDateFormat
@@ -46,6 +47,11 @@ class MainActivity : AppCompatActivity() {
 
     // ===== Change this URL if your site ever moves =====
     private val startUrl = "https://kisaindonesia.id/"
+
+    // true  = tombol back/home/recent disembunyikan, menu web menempel di dasar layar
+    //         (muncul sebentar saat digeser dari tepi bawah) - seperti game Arrows
+    // false = tombol sistem selalu tampil, menu web duduk tepat di atasnya
+    private val IMMERSIVE_NAV = true
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -136,19 +142,32 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Sejak targetSdk 35+, Android memaksa tampilan edge-to-edge: konten digambar
-     * sampai ke balik status bar dan tombol navigasi. Di sini seluruh konten diberi
-     * jarak setinggi bar sistem (dan setinggi keyboard saat mengetik), sehingga
-     * header dan menu bawah halaman web tidak tertutup.
+     * sampai ke balik status bar dan tombol navigasi.
+     *
+     * Jarak bawah diambil dari tinggi navigation bar sistem yang sedang berlaku,
+     * dan listener ini dipanggil ulang setiap kali bar itu muncul atau menghilang.
+     * Hasilnya menu bawah halaman web mengikuti: naik ke atas tombol back/home saat
+     * tombolnya tampil, lalu turun mengisi ruang itu saat tombolnya disembunyikan —
+     * sama seperti perilaku Google Maps. Jarak atas mengikuti status bar, dan saat
+     * keyboard terbuka jarak bawah menyesuaikan tinggi keyboard.
      */
     private fun setupSystemBars() {
         val root = findViewById<View>(android.R.id.content)
-        // Warna area di balik status bar & navigation bar, samakan dengan header web
         root.setBackgroundColor(Color.WHITE)
 
-        // Latar putih -> ikon jam, sinyal, baterai, dan tombol navigasi dibuat gelap
         WindowCompat.getInsetsController(window, window.decorView).apply {
+            // Latar putih -> ikon jam, sinyal, baterai, dan tombol navigasi dibuat gelap
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
+
+            if (IMMERSIVE_NAV) {
+                // Sembunyikan tombol back/home/recent; menu web menempel di dasar layar.
+                // Geser dari tepi bawah -> tombol muncul sebentar melayang di atas konten,
+                // lalu hilang sendiri. Status bar atas tetap tampil seperti biasa.
+                systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.navigationBars())
+            }
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -428,6 +447,15 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         webView.saveState(outState)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Sembunyikan lagi tombol sistem setelah app kembali ke depan
+        if (hasFocus && IMMERSIVE_NAV) {
+            WindowCompat.getInsetsController(window, window.decorView)
+                .hide(WindowInsetsCompat.Type.navigationBars())
+        }
     }
 
     override fun onPause() { super.onPause(); webView.onPause() }
