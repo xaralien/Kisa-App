@@ -172,17 +172,35 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+
+            // Tombol sistem yang muncul sementara (transient) tidak mengambil ruang
+            // layout, jadi insetnya nol walau tombolnya terlihat. Karena itu kita baca
+            // status terlihatnya, lalu pakai tinggi aslinya supaya menu web naik ke
+            // atas tombol selama tombol itu tampil, dan turun lagi saat menghilang.
+            val navVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+            val navHeight = insets
+                .getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars())
+                .bottom
+            val navBottom = if (navVisible) navHeight else 0
+
             view.setPadding(
                 bars.left,
                 bars.top,
                 bars.right,
-                maxOf(bars.bottom, ime.bottom)
+                maxOf(navBottom, ime.bottom)
             )
             WindowInsetsCompat.CONSUMED
         }
+        // Di sebagian perangkat, munculnya tombol transient tidak otomatis memicu
+        // perhitungan ulang di atas. Listener ini memaksanya dihitung ulang.
+        WindowCompat.getInsetsController(window, window.decorView)
+            .addOnControllableInsetsChangedListener { _, _ ->
+                ViewCompat.requestApplyInsets(root)
+            }
+
         ViewCompat.requestApplyInsets(root)
     }
 
