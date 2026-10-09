@@ -54,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     private val IMMERSIVE_NAV = true
 
     // Berapa lama tombol sistem dibiarkan tampil sebelum disembunyikan lagi (milidetik)
-    private val NAV_AUTO_HIDE_MS = 3000L
+    private val NAV_AUTO_HIDE_MS = 5000L
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -157,6 +157,17 @@ class MainActivity : AppCompatActivity() {
     private fun setupSystemBars() {
         val root = findViewById<View>(android.R.id.content)
         root.setBackgroundColor(Color.WHITE)
+
+        // Area di balik status bar dan navigation bar. Tanpa ini, Android memakai
+        // warna bawaan (hitam) sehingga ikon gelap jadi tidak terbaca. Diabaikan
+        // di Android 15+ karena di sana bar selalu transparan, dan latar putih
+        // decorView di bawah ini yang mengambil alih.
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            window.statusBarColor = Color.WHITE
+            window.navigationBarColor = Color.WHITE
+        }
+        window.decorView.setBackgroundColor(Color.WHITE)
 
         val controller = WindowCompat.getInsetsController(window, window.decorView)
 
