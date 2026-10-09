@@ -53,6 +53,9 @@ class MainActivity : AppCompatActivity() {
     // false = tombol sistem selalu tampil, menu web duduk tepat di atasnya
     private val IMMERSIVE_NAV = true
 
+    // Berapa lama tombol sistem dibiarkan tampil sebelum disembunyikan lagi (milidetik)
+    private val NAV_AUTO_HIDE_MS = 3000L
+
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var swipeRefresh: SwipeRefreshLayout
@@ -155,53 +158,56 @@ class MainActivity : AppCompatActivity() {
         val root = findViewById<View>(android.R.id.content)
         root.setBackgroundColor(Color.WHITE)
 
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            // Latar putih -> ikon jam, sinyal, baterai, dan tombol navigasi dibuat gelap
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
 
-            if (IMMERSIVE_NAV) {
-                // Sembunyikan tombol back/home/recent; menu web menempel di dasar layar.
-                // Geser dari tepi bawah -> tombol muncul sebentar melayang di atas konten,
-                // lalu hilang sendiri. Status bar atas tetap tampil seperti biasa.
-                systemBarsBehavior =
-                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                hide(WindowInsetsCompat.Type.navigationBars())
-            }
+        // Latar putih -> ikon jam, sinyal, baterai, dan tombol navigasi dibuat gelap
+        controller.isAppearanceLightStatusBars = true
+        controller.isAppearanceLightNavigationBars = true
+
+        if (IMMERSIVE_NAV) {
+            // BEHAVIOR_DEFAULT (bukan TRANSIENT): saat digeser dari tepi bawah, tombol
+            // sistem muncul sebagai bar sungguhan yang mengambil ruang layout, sehingga
+            // menu web ikut terdorong naik ke atasnya. Bar transient tidak bisa begini,
+            // karena Android sengaja membuatnya melayang tanpa menggeser konten.
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            controller.hide(WindowInsetsCompat.Type.navigationBars())
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val bars = insets.getInsets(
-                WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-
-            // Tombol sistem yang muncul sementara (transient) tidak mengambil ruang
-            // layout, jadi insetnya nol walau tombolnya terlihat. Karena itu kita baca
-            // status terlihatnya, lalu pakai tinggi aslinya supaya menu web naik ke
-            // atas tombol selama tombol itu tampil, dan turun lagi saat menghilang.
-            val navVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
-            val navHeight = insets
-                .getInsetsIgnoringVisibility(WindowInsetsCompat.Type.navigationBars())
-                .bottom
-            val navBottom = if (navVisible) navHeight else 0
-
             view.setPadding(
                 bars.left,
                 bars.top,
                 bars.right,
-                maxOf(navBottom, ime.bottom)
+                maxOf(bars.bottom, ime.bottom)
             )
-            WindowInsetsCompat.CONSUMED
-        }
-        // Di sebagian perangkat, munculnya tombol transient tidak otomatis memicu
-        // perhitungan ulang di atas. Listener ini memaksanya dihitung ulang.
-        WindowCompat.getInsetsController(window, window.decorView)
-            .addOnControllableInsetsChangedListener { _, _ ->
-                ViewCompat.requestApplyInsets(root)
+
+            // Tombol sistem sedang tampil -> jadwalkan sembunyi lagi, meniru perilaku
+            // auto-hide. Dibatalkan kalau keyboard sedang terbuka.
+            if (IMMERSIVE_NAV) {
+                val navVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars())
+                val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+                scheduleHideNav(navVisible && !imeVisible)
             }
 
+            WindowInsetsCompat.CONSUMED
+        }
         ViewCompat.requestApplyInsets(root)
+    }
+
+    /** Menyembunyikan tombol sistem lagi beberapa detik setelah ia dimunculkan. */
+    private fun scheduleHideNav(enable: Boolean) {
+        val root = findViewById<View>(android.R.id.content)
+        root.removeCallbacks(hideNavRunnable)
+        if (enable) root.postDelayed(hideNavRunnable, NAV_AUTO_HIDE_MS)
+    }
+
+    private val hideNavRunnable = Runnable {
+        WindowCompat.getInsetsController(window, window.decorView)
+            .hide(WindowInsetsCompat.Type.navigationBars())
     }
 
     // ---------- Permissions ----------
