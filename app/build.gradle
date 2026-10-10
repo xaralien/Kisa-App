@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "id.kisaindonesia.mobile"
-        minSdk 21
+        minSdk 24
         targetSdk 36
         versionCode 4
         versionName "1.3"
