@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.MimeTypeMap
@@ -56,6 +57,10 @@ class MainActivity : AppCompatActivity() {
 
     // Berapa lama tombol sistem dibiarkan tampil sebelum disembunyikan lagi (milidetik)
     private val NAV_AUTO_HIDE_MS = 5000L
+
+    // true = screenshot dan perekaman layar diblokir, isi app juga disembunyikan
+    //        dari daftar aplikasi terbaru (Recent apps)
+    private val BLOCK_SCREENSHOT = true
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -108,6 +113,18 @@ class MainActivity : AppCompatActivity() {
         setTheme(R.style.Theme_KisaApp)
         super.onCreate(savedInstanceState)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+
+        // Blokir screenshot / perekaman layar. Dipasang sebelum setContentView agar
+        // berlaku sejak frame pertama. Selain memblokir tangkapan layar, flag ini juga
+        // mengosongkan pratinjau app di Recent apps dan mencegah tampilan dilempar ke
+        // layar eksternal yang tidak aman (mis. casting).
+        if (BLOCK_SCREENSHOT) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        }
+
         setContentView(R.layout.activity_main)
 
         setupSystemBars()
