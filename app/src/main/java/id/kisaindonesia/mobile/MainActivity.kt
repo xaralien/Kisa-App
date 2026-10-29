@@ -278,12 +278,12 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
+        // No media/storage permission on Android 10+: uploads go through the system
+        // file picker and DownloadManager can write to Downloads without permission.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms.add(Manifest.permission.READ_MEDIA_IMAGES)
-            perms.add(Manifest.permission.READ_MEDIA_VIDEO)
             // Needed so DownloadManager's "download complete" notification can show
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         }

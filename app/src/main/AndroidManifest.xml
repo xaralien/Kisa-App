@@ -14,14 +14,22 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
-<!-- Scoped Storage - works untuk semua versi modern -->
-<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-
-    <!-- Files: granular media (Android 13+) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Storage: only needed on old Android versions.
+         - Uploads use the system file picker (ACTION_GET_CONTENT) and the camera
+           writes into our own cache via FileProvider, so no media permission is needed.
+         - DownloadManager saves into Downloads without permission on Android 10+.
+         READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / MANAGE_EXTERNAL_STORAGE are intentionally
+         NOT requested (Google Play photo & video / all-files-access policy).
+         tools:node="remove" also strips them if a library tries to merge them in. -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:node="remove" />
 
     <!-- Needed on Android 13+ to show the "download complete" notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
