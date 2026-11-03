@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
@@ -58,9 +59,16 @@ class MainActivity : AppCompatActivity() {
     // Berapa lama tombol sistem dibiarkan tampil sebelum disembunyikan lagi (milidetik)
     private val NAV_AUTO_HIDE_MS = 5000L
 
-    // true = screenshot dan perekaman layar diblokir, isi app juga disembunyikan
-    //        dari daftar aplikasi terbaru (Recent apps)
+    // true = screenshot dan perekaman layar diblokir di halaman yang cocok dengan
+    //        SCREENSHOT_BLOCKED_PATHS, isi app juga disembunyikan dari Recent apps
+    // false = screenshot selalu diizinkan di semua halaman
     private val BLOCK_SCREENSHOT = true
+
+    // Halaman (awalan path URL) yang TIDAK boleh di-screenshot / direkam.
+    // Halaman lain bebas di-screenshot.
+    //   listOf("/")                  -> semua halaman diblokir
+    //   listOf("/ujian", "/materi")  -> hanya kisaindonesia.id/ujian... dan /materi... diblokir
+    private val SCREENSHOT_BLOCKED_PATHS = listOf("/")
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -115,15 +123,11 @@ class MainActivity : AppCompatActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
 
         // Blokir screenshot / perekaman layar. Dipasang sebelum setContentView agar
-        // berlaku sejak frame pertama. Selain memblokir tangkapan layar, flag ini juga
+        // berlaku sejak frame pertama, lalu diatur ulang setiap pindah halaman
+        // (lihat SCREENSHOT_BLOCKED_PATHS). Selain memblokir tangkapan layar, flag ini juga
         // mengosongkan pratinjau app di Recent apps dan mencegah tampilan dilempar ke
         // layar eksternal yang tidak aman (mis. casting).
-        if (BLOCK_SCREENSHOT) {
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE
-            )
-        }
+        updateScreenshotBlock(startUrl)
 
         setContentView(R.layout.activity_main)
 
@@ -373,6 +377,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            super.onPageStarted(view, url, favicon)
+            updateScreenshotBlock(url)
+        }
+
+        // Juga terpanggil saat situs pindah halaman tanpa reload (history.pushState)
+        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+            super.doUpdateVisitedHistory(view, url, isReload)
+            updateScreenshotBlock(url)
+        }
+
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             swipeRefresh.isRefreshing = false
@@ -506,6 +521,22 @@ class MainActivity : AppCompatActivity() {
         cb.onReceiveValue(results)
         filePathCallback = null
         cameraImageUri = null
+    }
+
+    // ---------- Screenshot block per halaman ----------
+
+    private fun shouldBlockScreenshot(url: String?): Boolean {
+        if (!BLOCK_SCREENSHOT) return false
+        val path = url?.let { Uri.parse(it).path }?.ifEmpty { "/" } ?: "/"
+        return SCREENSHOT_BLOCKED_PATHS.any { path.startsWith(it) }
+    }
+
+    private fun updateScreenshotBlock(url: String?) {
+        if (shouldBlockScreenshot(url)) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     // ---------- Helpers ----------
