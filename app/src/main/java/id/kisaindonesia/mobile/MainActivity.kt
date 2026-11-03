@@ -65,10 +65,12 @@ class MainActivity : AppCompatActivity() {
     private val BLOCK_SCREENSHOT = true
 
     // Halaman (awalan path URL) yang TIDAK boleh di-screenshot / direkam.
-    // Halaman lain bebas di-screenshot.
-    //   listOf("/")                  -> semua halaman diblokir
-    //   listOf("/ujian", "/materi")  -> hanya kisaindonesia.id/ujian... dan /materi... diblokir
-    private val SCREENSHOT_BLOCKED_PATHS = listOf("/")
+    // Halaman lain bebas di-screenshot. Tanda * = satu bagian path apa saja.
+    //   listOf("/")                     -> semua halaman diblokir
+    //   listOf("/ujian", "/materi")     -> hanya kisaindonesia.id/ujian... dan /materi... diblokir
+    //   listOf("/stories/*/chapters")   -> semua chapter dari cerita mana pun diblokir,
+    //                                      mis. /stories/kos-ceban/chapters/kos-sepuluh-ribu
+    private val SCREENSHOT_BLOCKED_PATHS = listOf("/stories/*/chapters")
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
@@ -528,7 +530,14 @@ class MainActivity : AppCompatActivity() {
     private fun shouldBlockScreenshot(url: String?): Boolean {
         if (!BLOCK_SCREENSHOT) return false
         val path = url?.let { Uri.parse(it).path }?.ifEmpty { "/" } ?: "/"
-        return SCREENSHOT_BLOCKED_PATHS.any { path.startsWith(it) }
+        return blockedPathPatterns.any { it.containsMatchIn(path) }
+    }
+
+    // "/stories/*/chapters" -> ^/stories/[^/]+/chapters (dicocokkan dari awal path)
+    private val blockedPathPatterns by lazy {
+        SCREENSHOT_BLOCKED_PATHS.map { pattern ->
+            Regex("^" + pattern.split("*").joinToString("[^/]+") { Regex.escape(it) })
+        }
     }
 
     private fun updateScreenshotBlock(url: String?) {
