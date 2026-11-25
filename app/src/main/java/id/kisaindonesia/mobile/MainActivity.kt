@@ -76,7 +76,8 @@ class MainActivity : AppCompatActivity() {
     // Aturan penulisannya sama dengan SCREENSHOT_BLOCKED_PATHS.
     //   listOf("/messages") -> kisaindonesia.id/messages... tidak bisa ditarik untuk refresh,
     //                          supaya scroll ke atas di chat tidak memicu reload
-    private val NO_PULL_REFRESH_PATHS = listOf("/messages")
+    //   "/stories/*/chapters/*/editor" -> editor chapter, mis. /stories/83/chapters/980/editor
+    private val NO_PULL_REFRESH_PATHS = listOf("/messages", "/stories/*/chapters/*/editor")
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
