@@ -72,9 +72,16 @@ class MainActivity : AppCompatActivity() {
     //                                      mis. /stories/kos-ceban/chapters/kos-sepuluh-ribu
     private val SCREENSHOT_BLOCKED_PATHS = listOf("/stories/*/chapters")
 
+    // Halaman yang tarik-ke-bawah-untuk-refresh (pull to refresh) DIMATIKAN.
+    // Aturan penulisannya sama dengan SCREENSHOT_BLOCKED_PATHS.
+    //   listOf("/messages") -> kisaindonesia.id/messages... tidak bisa ditarik untuk refresh,
+    //                          supaya scroll ke atas di chat tidak memicu reload
+    private val NO_PULL_REFRESH_PATHS = listOf("/messages")
+
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
     private lateinit var swipeRefresh: SwipeRefreshLayout
+    private var pullRefreshAllowed = true
     private lateinit var splashOverlay: View
     private var splashHidden = false
 
@@ -149,7 +156,7 @@ class MainActivity : AppCompatActivity() {
         swipeRefresh.setOnRefreshListener { webView.reload() }
         // Only allow pull-to-refresh when the page is scrolled to the very top
         webView.setOnScrollChangeListener { _, _, scrollY, _, _ ->
-            swipeRefresh.isEnabled = scrollY == 0
+            swipeRefresh.isEnabled = pullRefreshAllowed && scrollY == 0
         }
 
         if (savedInstanceState == null) {
@@ -382,12 +389,14 @@ class MainActivity : AppCompatActivity() {
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             super.onPageStarted(view, url, favicon)
             updateScreenshotBlock(url)
+            updatePullRefresh(url)
         }
 
         // Juga terpanggil saat situs pindah halaman tanpa reload (history.pushState)
         override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
             super.doUpdateVisitedHistory(view, url, isReload)
             updateScreenshotBlock(url)
+            updatePullRefresh(url)
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
@@ -527,18 +536,10 @@ class MainActivity : AppCompatActivity() {
 
     // ---------- Screenshot block per halaman ----------
 
-    private fun shouldBlockScreenshot(url: String?): Boolean {
-        if (!BLOCK_SCREENSHOT) return false
-        val path = url?.let { Uri.parse(it).path }?.ifEmpty { "/" } ?: "/"
-        return blockedPathPatterns.any { it.containsMatchIn(path) }
-    }
+    private fun shouldBlockScreenshot(url: String?): Boolean =
+        BLOCK_SCREENSHOT && matchesAnyPath(url, blockedPathPatterns)
 
-    // "/stories/*/chapters" -> ^/stories/[^/]+/chapters (dicocokkan dari awal path)
-    private val blockedPathPatterns by lazy {
-        SCREENSHOT_BLOCKED_PATHS.map { pattern ->
-            Regex("^" + pattern.split("*").joinToString("[^/]+") { Regex.escape(it) })
-        }
-    }
+    private val blockedPathPatterns by lazy { toPathPatterns(SCREENSHOT_BLOCKED_PATHS) }
 
     private fun updateScreenshotBlock(url: String?) {
         if (shouldBlockScreenshot(url)) {
@@ -548,7 +549,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Pull to refresh per halaman ----------
+
+    private val noPullRefreshPatterns by lazy { toPathPatterns(NO_PULL_REFRESH_PATHS) }
+
+    private fun updatePullRefresh(url: String?) {
+        pullRefreshAllowed = !matchesAnyPath(url, noPullRefreshPatterns)
+        if (!pullRefreshAllowed) {
+            swipeRefresh.isRefreshing = false
+            swipeRefresh.isEnabled = false
+        } else {
+            swipeRefresh.isEnabled = webView.scrollY == 0
+        }
+    }
+
     // ---------- Helpers ----------
+
+    // "/stories/*/chapters" -> ^/stories/[^/]+/chapters (dicocokkan dari awal path)
+    private fun toPathPatterns(paths: List<String>) = paths.map { pattern ->
+        Regex("^" + pattern.split("*").joinToString("[^/]+") { Regex.escape(it) })
+    }
+
+    private fun matchesAnyPath(url: String?, patterns: List<Regex>): Boolean {
+        val path = url?.let { Uri.parse(it).path }?.ifEmpty { "/" } ?: "/"
+        return patterns.any { it.containsMatchIn(path) }
+    }
 
     private fun hasPermission(p: String) =
         ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
